@@ -20,7 +20,7 @@ Started: 2026-06-03
 - [x] 8. Tests (`#[test]` / `#[tokio::test]`)
 - [x] 9. Split into modules (models.rs, handlers, etc.)
 - [x] 10. Compile-time-checked SQL (`sqlx::query!` macro)
-- [ ] 11. Dockerize & run anywhere
+- [x] 11. Dockerize & run anywhere
 
 ---
 
@@ -286,6 +286,31 @@ can't compile (no DB to check against). Fix = sqlx OFFLINE MODE:
   `cargo install sqlx-cli --no-default-features --features sqlite`
   `cargo sqlx prepare`   # generates a `.sqlx/` cache you COMMIT
 Then builds work with no live DB (set SQLX_OFFLINE=true). Needed before Docker.
+
+---
+
+## Challenge 11 — Dockerize  [DONE]
+
+Files added: `Dockerfile`, `.dockerignore`. Final image `rust-crud` = 123 MB.
+
+- Changed bind from `127.0.0.1:4000` to `0.0.0.0:4000` so Docker port-mapping can reach it.
+- Multi-stage build:
+  - Stage 1 `FROM rust:1` = big image with compiler → `cargo build --release` (with SQLX_OFFLINE=true).
+  - Stage 2 `FROM debian:bookworm-slim` = tiny image; COPY only the binary across.
+  - Result: ~123 MB final image instead of ~1.5 GB (ships the program, not the toolchain).
+- This is why we set up sqlx offline mode first — the build has no live DB.
+
+Commands:
+```bash
+docker build -t rust-crud .
+docker run -p 4000:4000 rust-crud                 # run
+docker run -p 4000:4000 -v "$(pwd)/data:/app" rust-crud   # run + persist todos.db to ./data
+```
+Dockerfile keywords: FROM (base image), WORKDIR, COPY, RUN (build-time cmd),
+EXPOSE (doc the port), CMD (start command). `.dockerignore` = like .gitignore for builds.
+
+Data note: todos.db lives inside the container unless you mount a volume (-v).
+Deploy = push this image to any cloud (Fly.io/Railway/VPS) and `docker run` it.
 
 ---
 
