@@ -19,7 +19,7 @@ Started: 2026-06-03
 - [x] 7. Logging with the `tracing` crate
 - [x] 8. Tests (`#[test]` / `#[tokio::test]`)
 - [x] 9. Split into modules (models.rs, handlers, etc.)
-- [ ] 10. Compile-time-checked SQL (`sqlx::query!` macro)
+- [x] 10. Compile-time-checked SQL (`sqlx::query!` macro)
 - [ ] 11. Dockerize & run anywhere
 
 ---
@@ -263,6 +263,29 @@ Two compiler lessons:
   Needed because test asserts/`unwrap_err` must print the value on failure.
 - `let _ = expr;` = "deliberately ignore this return value" (silences must-use warnings,
   e.g. ignoring a Result/Json you don't need in a test).
+
+---
+
+## Challenge 10 — Compile-time-checked SQL  [DONE]
+
+Switched runtime queries to compile-time-checked MACROS:
+- `sqlx::query_as::<_, Todo>("SELECT ...").bind(id)` → `sqlx::query_as!(Todo, "SELECT ...", id)`
+- `sqlx::query("DELETE ...").bind(id)` → `sqlx::query!("DELETE ...", id)`
+- Bind params move from `.bind(x)` to macro args after the SQL string.
+- The `!` macro CONNECTS to the DB at compile time and verifies tables/columns/types
+  against the `Todo` struct. A typo'd column = COMPILE error, e.g.:
+  `error: no such column: titel  --> src/handlers.rs:17`. Bug never reaches runtime.
+
+Setup needed:
+- `.env` file with `DATABASE_URL=sqlite:todos.db` (the macro reads it at build time).
+- todos.db must exist WITH the schema at compile time.
+- `.env` is gitignored (machine-specific).
+
+CAVEAT / next: with `.env` and `todos.db` gitignored, a FRESH CLONE or Docker build
+can't compile (no DB to check against). Fix = sqlx OFFLINE MODE:
+  `cargo install sqlx-cli --no-default-features --features sqlite`
+  `cargo sqlx prepare`   # generates a `.sqlx/` cache you COMMIT
+Then builds work with no live DB (set SQLX_OFFLINE=true). Needed before Docker.
 
 ---
 

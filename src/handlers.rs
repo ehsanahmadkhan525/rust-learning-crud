@@ -13,7 +13,8 @@ use crate::models::{CreateTodo, Todo, UpdateTodo};
 
 // GET /todos
 pub async fn list_todos(State(pool): State<SqlitePool>) -> Result<Json<Vec<Todo>>, StatusCode> {
-    let todos = sqlx::query_as::<_, Todo>("SELECT id, title, done FROM todos")
+    // query_as! checks this SQL against the real DB at COMPILE time.
+    let todos = sqlx::query_as!(Todo, "SELECT id, title, done FROM todos")
         .fetch_all(&pool)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -30,10 +31,12 @@ pub async fn create_todo(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let todo = sqlx::query_as::<_, Todo>(
+    // Bind params now go INSIDE the macro (after the SQL) instead of .bind().
+    let todo = sqlx::query_as!(
+        Todo,
         "INSERT INTO todos (title, done) VALUES (?, 0) RETURNING id, title, done",
+        payload.title
     )
-    .bind(payload.title)
     .fetch_one(&pool)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -46,8 +49,7 @@ pub async fn get_todo(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<Json<Todo>, StatusCode> {
-    let todo = sqlx::query_as::<_, Todo>("SELECT id, title, done FROM todos WHERE id = ?")
-        .bind(id)
+    let todo = sqlx::query_as!(Todo, "SELECT id, title, done FROM todos WHERE id = ?", id)
         .fetch_optional(&pool)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -70,8 +72,7 @@ pub async fn update_todo(
         }
     }
 
-    let existing = sqlx::query_as::<_, Todo>("SELECT id, title, done FROM todos WHERE id = ?")
-        .bind(id)
+    let existing = sqlx::query_as!(Todo, "SELECT id, title, done FROM todos WHERE id = ?", id)
         .fetch_optional(&pool)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -84,13 +85,16 @@ pub async fn update_todo(
         todo.done = done;
     }
 
-    sqlx::query("UPDATE todos SET title = ?, done = ? WHERE id = ?")
-        .bind(&todo.title)
-        .bind(todo.done)
-        .bind(id)
-        .execute(&pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // query! (no struct) for statements that don't return rows.
+    sqlx::query!(
+        "UPDATE todos SET title = ?, done = ? WHERE id = ?",
+        todo.title,
+        todo.done,
+        id
+    )
+    .execute(&pool)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(todo))
 }
@@ -100,8 +104,7 @@ pub async fn delete_todo(
     State(pool): State<SqlitePool>,
     Path(id): Path<i64>,
 ) -> Result<StatusCode, StatusCode> {
-    let result = sqlx::query("DELETE FROM todos WHERE id = ?")
-        .bind(id)
+    let result = sqlx::query!("DELETE FROM todos WHERE id = ?", id)
         .execute(&pool)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

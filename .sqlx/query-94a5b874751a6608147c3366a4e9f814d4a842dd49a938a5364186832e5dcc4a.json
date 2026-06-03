@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO todos (title, done) VALUES (?, 0) RETURNING id, title, done",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "todos",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "todos",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "done",
+        "ordinal": 2,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "todos",
+            "name": "done"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "94a5b874751a6608147c3366a4e9f814d4a842dd49a938a5364186832e5dcc4a"
+}

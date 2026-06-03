@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, title, done FROM todos",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "todos",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "todos",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "done",
+        "ordinal": 2,
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "todos",
+            "name": "done"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e80161f85d6f2ffa7d9edd9cc8bbfc2dee0511fd875fc4a3c3e175af70c891c6"
+}
