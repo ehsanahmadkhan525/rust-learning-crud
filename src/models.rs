@@ -4,7 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, sqlx::FromRow)]
+// Debug = lets the value be printed for developers (needed by test asserts/unwrap_err).
+#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct Todo {
     pub id: i64, // fields also need `pub` to be read from another module
     pub title: String,

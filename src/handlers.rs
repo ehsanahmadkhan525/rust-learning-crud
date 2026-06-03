@@ -155,7 +155,8 @@ mod tests {
     #[tokio::test]
     async fn delete_then_gone() {
         let pool = init_db("sqlite::memory:").await;
-        create_todo(State(pool.clone()), Json(CreateTodo { title: "Bye".into() }))
+        // `let _ =` = "I'm deliberately ignoring the return value" (silences the warning)
+        let _ = create_todo(State(pool.clone()), Json(CreateTodo { title: "Bye".into() }))
             .await
             .unwrap();
         let status = delete_todo(State(pool.clone()), Path(1)).await.unwrap();
