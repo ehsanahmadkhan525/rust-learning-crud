@@ -5,6 +5,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::sqlite::SqlitePoolOptions;
 use sqlx::SqlitePool; // a pool of reusable database connections
 use tower_http::trace::TraceLayer; // auto-logs every HTTP request/response
 use tracing::info; // info!(...) = print an informational log line
@@ -40,22 +41,8 @@ async fn main() {
         .with_env_filter("info,tower_http=debug")
         .init();
 
-    // Connect to (and create, thanks to ?mode=rwc) a SQLite file `todos.db`.
-    let pool = SqlitePool::connect("sqlite:todos.db?mode=rwc")
-        .await
-        .unwrap();
-
-    // Create the table once if it doesn't exist yet.
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS todos (
-            id    INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT    NOT NULL,
-            done  BOOLEAN NOT NULL DEFAULT 0
-        )",
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    // Connect to the real database file `todos.db`.
+    let pool = init_db("sqlite:todos.db?mode=rwc").await;
 
     // The shared state is now the connection pool (it's cheap to clone & share).
     let app = Router::new()
@@ -72,6 +59,31 @@ async fn main() {
         .unwrap();
     info!("🚀 Server running on http://127.0.0.1:4000 (data persists in todos.db)");
     axum::serve(listener, app).await.unwrap();
+}
+
+// Connect to a database and make sure the `todos` table exists.
+// Used by main (with a file) AND by tests (with an in-memory db).
+// max_connections(1): SQLite serializes writes anyway, and it keeps an
+// in-memory ("sqlite::memory:") database alive for the pool's whole life.
+async fn init_db(url: &str) -> SqlitePool {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(url)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS todos (
+            id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT    NOT NULL,
+            done  BOOLEAN NOT NULL DEFAULT 0
+        )",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    pool
 }
 
 // ---- HANDLERS ----
@@ -184,5 +196,74 @@ async fn delete_todo(
     } else {
         info!(id, "delete failed: no such todo");
         Err(StatusCode::NOT_FOUND) // no row matched
+    }
+}
+
+// ---- TESTS ----
+// #[cfg(test)] = "only compile this block when running `cargo test`" (not in the real app).
+#[cfg(test)]
+mod tests {
+    use super::*; // bring everything above (Todo, handlers, init_db...) into the tests
+
+    // We call the handler functions DIRECTLY, building their extractor arguments by hand:
+    //   State(pool)          instead of the framework injecting it
+    //   Json(CreateTodo{..}) instead of a real JSON request body
+    //   Path(id)             instead of a real URL
+    // Each test gets its OWN fresh in-memory database, so they never interfere.
+
+    #[tokio::test] // like #[test] but for async functions
+    async fn create_then_list_works() {
+        let pool = init_db("sqlite::memory:").await;
+
+        // Create a todo
+        let (status, Json(todo)) =
+            create_todo(State(pool.clone()), Json(CreateTodo { title: "Test".into() }))
+                .await
+                .unwrap();
+
+        assert_eq!(status, StatusCode::CREATED); // got 201?
+        assert_eq!(todo.title, "Test"); // right title?
+        assert_eq!(todo.id, 1); // first row gets id 1
+        assert!(!todo.done); // defaults to not-done
+
+        // List should now contain exactly one todo
+        let Json(todos) = list_todos(State(pool)).await.unwrap();
+        assert_eq!(todos.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn empty_title_is_rejected() {
+        let pool = init_db("sqlite::memory:").await;
+
+        let result =
+            create_todo(State(pool), Json(CreateTodo { title: "   ".into() })).await;
+
+        // We expect an error, specifically 400 Bad Request
+        assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn get_missing_todo_returns_404() {
+        let pool = init_db("sqlite::memory:").await;
+
+        let result = get_todo(State(pool), Path(999)).await;
+
+        assert_eq!(result.unwrap_err(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn delete_then_gone() {
+        let pool = init_db("sqlite::memory:").await;
+
+        // Make one, then delete it
+        create_todo(State(pool.clone()), Json(CreateTodo { title: "Bye".into() }))
+            .await
+            .unwrap();
+        let status = delete_todo(State(pool.clone()), Path(1)).await.unwrap();
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        // Deleting again should now be a 404
+        let second = delete_todo(State(pool), Path(1)).await;
+        assert_eq!(second.unwrap_err(), StatusCode::NOT_FOUND);
     }
 }
