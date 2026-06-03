@@ -1,0 +1,8 @@
+# Don't copy these into the Docker build (faster builds, smaller context)
+target
+todos.db
+todos.db-journal
+todos.db-shm
+todos.db-wal
+.git
+.env

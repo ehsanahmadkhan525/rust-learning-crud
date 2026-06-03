@@ -32,7 +32,9 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .with_state(pool);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:4000")
+    // 0.0.0.0 = listen on ALL network interfaces (required so Docker can reach it).
+    // Locally you still visit it at http://127.0.0.1:4000.
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:4000")
         .await
         .unwrap();
     info!("🚀 Server running on http://127.0.0.1:4000 (data persists in todos.db)");
