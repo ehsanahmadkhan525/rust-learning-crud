@@ -6,6 +6,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool; // a pool of reusable database connections
+use tower_http::trace::TraceLayer; // auto-logs every HTTP request/response
+use tracing::info; // info!(...) = print an informational log line
 
 // ---- DATA MODELS ----
 
@@ -30,6 +32,14 @@ struct UpdateTodo {
 
 #[tokio::main]
 async fn main() {
+    // Turn on logging. The filter string decides what gets printed:
+    //   info                  = show info-level logs from our app
+    //   tower_http=debug      = show each HTTP request/response
+    // You can override it at runtime with the RUST_LOG environment variable.
+    tracing_subscriber::fmt()
+        .with_env_filter("info,tower_http=debug")
+        .init();
+
     // Connect to (and create, thanks to ?mode=rwc) a SQLite file `todos.db`.
     let pool = SqlitePool::connect("sqlite:todos.db?mode=rwc")
         .await
@@ -54,12 +64,13 @@ async fn main() {
             "/todos/{id}",
             get(get_todo).put(update_todo).delete(delete_todo),
         )
+        .layer(TraceLayer::new_for_http()) // log every request that comes in
         .with_state(pool);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:4000")
         .await
         .unwrap();
-    println!("🚀 Server running on http://127.0.0.1:4000 (data persists in todos.db)");
+    info!("🚀 Server running on http://127.0.0.1:4000 (data persists in todos.db)");
     axum::serve(listener, app).await.unwrap();
 }
 
@@ -95,6 +106,8 @@ async fn create_todo(
     .fetch_one(&pool)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // {} fills in the value; the part before = is just a label in the log line
+    info!(id = todo.id, title = %todo.title, "created todo");
     Ok((StatusCode::CREATED, Json(todo)))
 }
 
@@ -166,8 +179,10 @@ async fn delete_todo(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if result.rows_affected() > 0 {
+        info!(id, "deleted todo");
         Ok(StatusCode::NO_CONTENT) // deleted something
     } else {
+        info!(id, "delete failed: no such todo");
         Err(StatusCode::NOT_FOUND) // no row matched
     }
 }
