@@ -82,6 +82,12 @@ async fn create_todo(
     State(pool): State<SqlitePool>,
     Json(payload): Json<CreateTodo>,
 ) -> Result<(StatusCode, Json<Todo>), StatusCode> {
+    // VALIDATION: reject a missing/blank title.
+    // .trim() removes surrounding spaces, so "   " counts as empty too.
+    if payload.title.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST); // 400 — the client sent bad data
+    }
+
     let todo = sqlx::query_as::<_, Todo>(
         "INSERT INTO todos (title, done) VALUES (?, 0) RETURNING id, title, done",
     )
@@ -114,6 +120,13 @@ async fn update_todo(
     Path(id): Path<i64>,
     Json(payload): Json<UpdateTodo>,
 ) -> Result<Json<Todo>, StatusCode> {
+    // VALIDATION: if a title was sent, it must not be blank.
+    if let Some(title) = &payload.title {
+        if title.trim().is_empty() {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
     // 1. Load the existing row (404 if it doesn't exist)
     let existing = sqlx::query_as::<_, Todo>("SELECT id, title, done FROM todos WHERE id = ?")
         .bind(id)
