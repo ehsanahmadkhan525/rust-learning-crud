@@ -1,0 +1,24 @@
+# ============ Single-stage build ============
+# One image does everything: compile AND run. Simpler to read, but the final
+# image is BIG (it keeps the Rust compiler, source, and all deps inside).
+# Use the multi-stage `Dockerfile` for a small production image.
+FROM rust:1
+
+WORKDIR /app
+
+# Use sqlx's offline query cache so we DON'T need a live database while building.
+ENV SQLX_OFFLINE=true
+
+# Copy everything needed to build.
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY .sqlx ./.sqlx
+
+# Build an optimized "release" binary.
+RUN cargo build --release
+
+# Document that the app listens on port 4000.
+EXPOSE 4000
+
+# Run the compiled binary.
+CMD ["./target/release/rust-learning-crud"]
